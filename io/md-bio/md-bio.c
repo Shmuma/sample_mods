@@ -44,6 +44,8 @@ int __init bio_md_init (void)
 		goto err_dev;
 	}
 
+	printk (KERN_INFO "bd_disk = %p\n", bd_disk->bd_disk);
+
 	/* allocate page for IO */
 	page = alloc_page (GFP_KERNEL);
 	if (!page) {
