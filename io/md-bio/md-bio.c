@@ -74,7 +74,8 @@ static
 void perform_bio (struct block_device *dev, struct page *page)
 {
 	struct bio *bio;
-	struct bio_vec vec;
+
+	printk (KERN_INFO "before alloc\n");
 
 	bio = bio_alloc (GFP_KERNEL, 1);
 	if (!bio) {
@@ -82,18 +83,18 @@ void perform_bio (struct block_device *dev, struct page *page)
 		return;
 	}
 
-	vec.bv_page = page;
-	vec.bv_len = PAGE_SIZE;
-	vec.bv_offset = 0;
-
-	bio->bi_sector = 0;
+	bio->bi_sector = 123;
 	bio->bi_size = PAGE_SIZE;
 	bio->bi_bdev = dev;
-	bio->bi_io_vec = &vec;
+	bio->bi_io_vec[0].bv_page = page;
+	bio->bi_io_vec[0].bv_len = PAGE_SIZE;
+	bio->bi_io_vec[0].bv_offset = 0;
 	bio->bi_vcnt = 1;
+	bio->bi_idx = 0;
 	bio->bi_rw = WRITE;
 	bio->bi_end_io = end_io_handler;
 
+	printk (KERN_INFO "before make req\n");
 	generic_make_request (bio);
 }
 
