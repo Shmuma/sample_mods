@@ -11,7 +11,7 @@ static struct page *page = NULL;
 
 
 module_param (device, charp, 0444);
-MODULE_PARM_DESC (device, "Block device to test BIO completion for correctness. WARNING! Module will perform write to first sector of this device!");
+MODULE_PARM_DESC (device, "Block device to test BIO completion for correctness.");
 
 static void end_io_handler (struct bio *bio, int val);
 static void perform_bio (struct block_device *dev, struct page *page);
@@ -20,34 +20,36 @@ static void perform_bio (struct block_device *dev, struct page *page);
 int __init bio_md_init (void)
 {
 	int err = 0;
-	dev_t dev;
 	struct block_device *bd_disk;
 
 	if (!device) {
-		printk (KERN_WARNING "md-bio: You must secify 'device' module parameter. Be carefull, I'll write to this device!\n");
+		printk (KERN_WARNING "md-bio: You must secify 'device' module parameter.\n");
 		err = -EINVAL;
 		goto err_dev;
 	}
 
 	/* Discover device */
-	dev = blk_lookup_devt (device, 0);
-	if (!dev) {
-		printk (KERN_WARNING "md-bio: device %s not found\n", device);
-		err = -ENODEV;
-		goto err_dev;
-	}
-
-	bd_disk = bdget (dev);
-	if (!bd_disk) {
-		printk (KERN_WARNING "md-bio: disk %s is not a block device\n", device);
-		err = -EINVAL;
+	bd_disk = lookup_bdev (device);
+	if (IS_ERR (bd_disk)) {
+		err = PTR_ERR (bd_disk);
+		printk (KERN_WARNING "md-bio: disk %s not found, error %d\n", device, err);
 		goto err_dev;
 	}
 
 	printk (KERN_INFO "bd_disk = %p\n", bd_disk->bd_disk);
+	printk (KERN_INFO "bd_dev  = %x\n", bd_disk->bd_dev);
+	printk (KERN_INFO "bd_contains = %p\n", bd_disk->bd_contains);
+	printk (KERN_INFO "bd_part = %p\n", bd_disk->bd_part);
+	printk (KERN_INFO "bd_inode = %p\n", bd_disk->bd_inode);
+
+	if (!bd_disk->bd_disk) {
+		printk (KERN_WARNING "bd_disk field is empty!\n");
+		err = -EINVAL;
+		goto err_mem;
+	}
 
 	/* allocate page for IO */
-	page = alloc_page (GFP_KERNEL);
+	page = alloc_page (GFP_KERNEL | __GFP_ZERO);
 	if (!page) {
 		printk (KERN_WARNING "md-bio: cannot allocate page for IO\n");
 		err = -ENOMEM;
@@ -85,7 +87,7 @@ void perform_bio (struct block_device *dev, struct page *page)
 		return;
 	}
 
-	bio->bi_sector = 123;
+	bio->bi_sector = 0;
 	bio->bi_size = PAGE_SIZE;
 	bio->bi_bdev = dev;
 	bio->bi_io_vec[0].bv_page = page;
@@ -93,7 +95,7 @@ void perform_bio (struct block_device *dev, struct page *page)
 	bio->bi_io_vec[0].bv_offset = 0;
 	bio->bi_vcnt = 1;
 	bio->bi_idx = 0;
-	bio->bi_rw = WRITE;
+	bio->bi_rw = READ;
 	bio->bi_end_io = end_io_handler;
 
 	printk (KERN_INFO "before make req\n");
@@ -102,9 +104,11 @@ void perform_bio (struct block_device *dev, struct page *page)
 
 
 static
-void end_io_handler (struct bio *bio, int val)
+void end_io_handler (struct bio *bio, int err)
 {
-	printk (KERN_INFO "md-bio: end_io_handler called\n");
+	printk (KERN_INFO "md-bio: end_io_handler called. Err = %d, bi_size = %d\n", err, bio->bi_size);
+	if (bio->bi_size)
+		BUG ();
 }
 
 
